@@ -23,6 +23,7 @@
 #include "autoware/behavior_path_planner_common/utils/utils.hpp"
 
 #include <autoware/universe_utils/geometry/boost_polygon_utils.hpp>
+#include <autoware/universe_utils/math/unit_conversion.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 
@@ -680,6 +681,13 @@ bool NormalLaneChange::hasFinishedLaneChange() const
     return !boost::geometry::disjoint(
       utils::toPolygon2d(lanes_polygon.value()),
       lanelet::utils::to2D(lanelet::utils::conversion::toLaneletPoint(current_pose.position)));
+  }
+
+  const auto yaw_deviation_to_centerline =
+    utils::lane_change::calc_angle_to_lanelet_segment(status_.target_lanes, current_pose);
+
+  if (yaw_deviation_to_centerline > autoware::universe_utils::deg2rad(5.0)) {
+    return false;
   }
 
   const auto arc_length = lanelet::utils::getArcCoordinates(status_.target_lanes, current_pose);
