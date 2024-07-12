@@ -29,7 +29,7 @@ class SteerMap
 {
 public:
   bool readSteerMapFromCSV(const std::string & csv_path, const bool validation = false);
-  void getSteer(const double steer_rate, const double steer, double & output) const;
+  double getSteer(const double steer_rate, const double steer, double & output) const;
 
 private:
   std::string vehicle_name_;

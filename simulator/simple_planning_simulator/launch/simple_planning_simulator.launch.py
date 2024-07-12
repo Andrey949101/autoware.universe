@@ -9,16 +9,17 @@
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
+# See the License for the specific language governing permissions and 
 # limitations under the License.
 
 import launch
-from launch.actions import DeclareLaunchArgument
-from launch.actions import OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import launch_ros.parameter_descriptions
 from launch_ros.substitutions import FindPackageShare
+from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 import yaml
 
 
@@ -57,6 +58,7 @@ def launch_setup(context, *args, **kwargs):
             ("input/vector_map", "/map/vector_map"),
             ("input/initialpose", "/initialpose3d"),
             ("input/ackermann_control_command", "/control/command/control_cmd"),
+            ("input/actuation_command", "/control/command/control_cmd"),
             ("input/manual_ackermann_control_command", "/vehicle/command/manual_control_cmd"),
             ("input/gear_command", "/control/command/gear_cmd"),
             ("input/manual_gear_command", "/vehicle/command/manual_gear_command"),
@@ -76,8 +78,28 @@ def launch_setup(context, *args, **kwargs):
             ("output/control_mode_report", "/vehicle/status/control_mode"),
         ],
     )
+    launch_vehicle_cmd_converter = True # tmp
 
-    return [simple_planning_simulator_node]
+    # Determine if we should launch raw_vehicle_cmd_converter based on the vehicle_model_type
+    with open(simulator_model_param_path, "r") as f:
+        simulator_model_param_yaml = yaml.safe_load(f)
+    launch_vehicle_cmd_converter = (
+        simulator_model_param_yaml["/**"]["ros__parameters"].get("vehicle_model_type") == "ACTUATION_CMD"
+    )
+    # 1) Launch only simple_planning_simulator_node
+    if not launch_vehicle_cmd_converter:
+        return [simple_planning_simulator_node]
+    # 2) Launch raw_vehicle_cmd_converter too
+    vehicle_launch_pkg = LaunchConfiguration("vehicle_model").perform(context) + "_launch"
+    raw_vehicle_converter_node = IncludeLaunchDescription(
+        XMLLaunchDescriptionSource(
+            [FindPackageShare("autoware_raw_vehicle_cmd_converter"), "/launch/raw_vehicle_converter.launch.xml"]
+        ),
+        launch_arguments={
+            'config_file': [FindPackageShare(vehicle_launch_pkg), '/config/raw_vehicle_cmd_converter.param.yaml']
+        }.items(),
+    )
+    return [simple_planning_simulator_node, raw_vehicle_converter_node]
 
 
 def generate_launch_description():
@@ -122,5 +144,27 @@ def generate_launch_description():
             "/param/acceleration_map.csv",
         ],
     )
+
+    # NOTE: {vehicle_model}_launchにはcsv_accel_brake_map_pathを渡す必要がある。
+
+    add_launch_arg(
+        "csv_accel_brake_map_path",
+        [
+            FindPackageShare("autoware_raw_vehicle_cmd_converter"),
+            "/data/default",
+        ],
+    )
+
+#   <group if="$(var launch_dummy_vehicle)">
+#     <arg name="simulator_model" default="$(var vehicle_model_pkg)/config/simulator_model.param.yaml" description="path to the file of simulator model"/>
+#     <include file="$(find-pkg-share simple_planning_simulator)/launch/simple_planning_simulator.launch.py">
+#       <arg name="vehicle_info_param_file" value="$(var vehicle_info_param_file)"/>
+#       <arg name="simulator_model_param_file" value="$(var simulator_model)"/>
+#       <arg name="initial_engage_state" value="$(var initial_engage_state)"/>
+#     </include>
+#   </group>    
+
+    # vehicle_model_pkgの引数をうけとる
+
 
     return launch.LaunchDescription(launch_arguments + [OpaqueFunction(function=launch_setup)])
