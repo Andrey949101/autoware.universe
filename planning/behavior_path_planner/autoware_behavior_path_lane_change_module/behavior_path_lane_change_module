@@ -1,0 +1,2 @@
+Now external_request_lane_change_module suggests changing the lane only if the ego is on the target lane.
+In order for external_request_lane_change_module to offer to change the lane even if it is not on the target lane, it is necessary to make a small change to the lane_change_module code.
